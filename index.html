@@ -63,7 +63,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .side-foot button:hover{background:var(--bk3)}
 .ver{color:#6f737b;font-size:10.5px;padding:2px 4px}
 /* principal */
-main{overflow:auto;padding:18px 22px 30px}
+main{overflow:auto;padding:18px 22px 30px;min-width:0}
 .ph{display:flex;align-items:center;gap:14px;margin-bottom:14px}
 .ph .ic{width:44px;height:44px}
 .ph h1{margin:0;font-size:21px;font-weight:800;letter-spacing:.2px;text-transform:uppercase}
@@ -271,8 +271,26 @@ table.t{width:100%;border-collapse:collapse;background:#fff}
   main{padding:12px 12px 16px;margin-bottom:64px}
   .ph{flex-wrap:wrap;gap:8px;margin-bottom:10px}.ph .ic{width:30px;height:30px}.ph h1{font-size:17px}.ph p{font-size:11.5px}
   .ph .acts{margin-left:0;width:100%;flex-wrap:wrap}.ph .acts .search{width:100%!important}
-  .grid,.promo-lay{grid-template-columns:1fr!important}
-  .grid > *{grid-column:auto!important}
+  .grid,.promo-lay{grid-template-columns:minmax(0,1fr)!important}
+  .grid > *,.promo-lay > *{grid-column:auto!important;min-width:0}
+  main,.card{min-width:0;max-width:100%}
+  .bigtabs{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .bigtab b{font-size:13px}
+  .row > .fl,.row > .search{flex:1 1 150px;min-width:0;width:auto!important}
+  .row > .fl select,.row > .fl input{max-width:100%}
+  .tw{max-width:100%}
+  .tcompra thead{display:none}
+  .tcompra tr{display:grid;grid-template-columns:44px 1fr 1fr 34px;gap:8px 10px;padding:10px;border-bottom:1px solid var(--g2)}
+  .tcompra td{border:0;padding:0;display:block;width:auto!important}
+  .tcompra td.em{grid-row:1/3;align-self:start}
+  .tcompra td:nth-child(2){grid-column:2/4;min-width:0!important}
+  .tcompra td.rm{grid-column:4;grid-row:1}
+  .tcompra td[data-l]{grid-column:span 1}
+  .tcompra td[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;color:var(--mu);font-weight:600;margin-bottom:2px;text-align:left}
+  .tcompra td[data-l] input{width:100%!important;text-align:left}
+  .tcompra td[data-l="Marca"]{grid-column:2/3}.tcompra td[data-l="Qtd (emb.)"]{grid-column:3/4}
+  .tcompra td[data-l="Conteúdo/emb."]{grid-column:2/3}.tcompra td[data-l="Preço unit."]{grid-column:3/4}
+  .tcompra td[data-l="Valor total"]{grid-column:2/4;text-align:right}
   .kpis{grid-template-columns:repeat(2,1fr)!important;gap:8px}
   .kpi{padding:10px;gap:8px}.kpi .ki{display:none}.kpi .kv{font-size:16px}.kpi .ks{font-size:10px}
   .kpi.big{padding:8px 4px}.kpi.big .ki{display:block}.kpi.big .ki svg{width:22px;height:22px}.kpi.big .kv{font-size:20px}
@@ -718,7 +736,7 @@ const UI = {
 };
 function renderSide(){
   $('#side').innerHTML = PAGES.map(p => `<button class="nav ${UI.page === p.id ? 'on' : ''}" title="${p.nome}" onclick="go('${p.id}')">${IC[p.ic]}<span class="lg">${p.nome.replace(' ', '<br>')}</span><span class="sh">${p.sh}</span></button>`).join('')
-    + `<div class="side-foot"><button onclick="openDados()" title="Orçamento e ciclo">⚙<span class="t"> Orçamento e ciclo</span></button><button onclick="openDados('excel')" title="Excel e backup">⇅<span class="t"> Excel e backup</span></button><div class="ver">v0.5 · versão de teste · ${fdate(BUILD)}</div></div>`;
+    + `<div class="side-foot"><button onclick="openDados()" title="Orçamento e ciclo">⚙<span class="t"> Orçamento e ciclo</span></button><button onclick="openDados('excel')" title="Excel e backup">⇅<span class="t"> Excel e backup</span></button><div class="ver">v0.5.1 · versão de teste · ${fdate(BUILD)}</div></div>`;
 }
 const BUILD = '2026-11-09T12:00:00';
 const MKEY = 'homecontrol_menu';
@@ -800,12 +818,12 @@ function regCompra(){
     return `<tr>
       <td class="em">${p ? pimg(p) : ''}</td>
       <td style="min-width:190px"><select onchange="setLine(${i},'pid',this.value)">${prodOptions(l.pid)}</select>${s && s.conhecido ? `<div class="small muted">em casa: ${fnum(s.estoque)} ${esc(p.unidade)}</div>` : p ? '<div class="small faint">estoque não conferido</div>' : ''}</td>
-      <td><input value="${esc(l.marca)}" placeholder="${esc(p ? p.marca : '')}" oninput="setLine(${i},'marca',this.value,1)" style="width:100px"></td>
-      <td><input class="n" style="width:56px" value="${fnum(l.qtd,3)}" oninput="setLine(${i},'qtd',this.value,1)"></td>
-      <td><input value="${esc(l.conteudo)}" placeholder="${esc(p && p.conteudo ? p.conteudo : 'ex.: 500 g')}" oninput="setLine(${i},'conteudo',this.value,1)" style="width:82px"></td>
-      <td><input class="n" value="${l.preco != null ? fnum(l.preco) : ''}" placeholder="0,00" oninput="setLine(${i},'preco',this.value,1)"></td>
-      <td class="right nm" id="sub${i}">${brl(sub)}</td>
-      <td><button class="iconbtn" title="Remover" onclick="UI.draft.lines.splice(${i},1);if(!UI.draft.lines.length)UI.draft.lines.push(blankLine());render()">✕</button></td></tr>`;
+      <td data-l="Marca"><input value="${esc(l.marca)}" placeholder="${esc(p ? p.marca : '')}" oninput="setLine(${i},'marca',this.value,1)" style="width:100px"></td>
+      <td data-l="Qtd (emb.)"><input class="n" style="width:56px" inputmode="decimal" value="${fnum(l.qtd,3)}" oninput="setLine(${i},'qtd',this.value,1)"></td>
+      <td data-l="Conteúdo/emb."><input value="${esc(l.conteudo)}" placeholder="${esc(p && p.conteudo ? p.conteudo : 'ex.: 500 g')}" oninput="setLine(${i},'conteudo',this.value,1)" style="width:82px"></td>
+      <td data-l="Preço unit."><input class="n" inputmode="decimal" value="${l.preco != null ? fnum(l.preco) : ''}" placeholder="0,00" oninput="setLine(${i},'preco',this.value,1)"></td>
+      <td class="right nm" data-l="Valor total" id="sub${i}">${brl(sub)}</td>
+      <td class="rm"><button class="iconbtn" title="Remover" onclick="UI.draft.lines.splice(${i},1);if(!UI.draft.lines.length)UI.draft.lines.push(blankLine());render()">✕</button></td></tr>`;
   }).join('');
   const tot = draftTotal();
   return modo + `<div class="card">
@@ -815,7 +833,7 @@ function regCompra(){
       <div class="fl"><label>Data e hora</label><input type="datetime-local" value="${d.data}" onchange="UI.draft.data=this.value"></div>
       <div class="fl"><label>Observação</label><input value="${esc(d.obs)}" oninput="UI.draft.obs=this.value"></div>
     </div>
-    <div class="tw"><table class="t"><thead><tr><th></th><th>Produto</th><th>Marca</th><th>Qtd (emb.)</th><th>Conteúdo/emb.</th><th>Preço unit.</th><th class="right">Valor total</th><th></th></tr></thead>
+    <div class="tw"><table class="t tcompra"><thead><tr><th></th><th>Produto</th><th>Marca</th><th>Qtd (emb.)</th><th>Conteúdo/emb.</th><th>Preço unit.</th><th class="right">Valor total</th><th></th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div class="row" style="margin-top:12px">
       <button class="btn" onclick="UI.draft=null;render()">${IC.eraser} Limpar</button>
@@ -2024,7 +2042,7 @@ function exportXlsx(){
     ['Reserva (R$) — vazio = vale − meta', {v: c.reserva ?? '', s: 6}, 'editável'], ['Dia do crédito (número ou "ultimo")', {v: c.diaCredito, s: 6}, 'editável'],
     ['Antecedência da compra (dias)', {v: c.margem, s: 6}, 'editável'], [],
     ['Exportado em', {v: now.toISOString(), s: 4}, 'não editar (usado para detectar conflitos)'],
-    ['Versão do app', {v: 'v0.5 teste', s: 4}, ''], [],
+    ['Versão do app', {v: 'v0.5.1 teste', s: 4}, ''], [],
     [{v: 'COMO SINCRONIZAR', s: 5}],
     ['1. A fonte principal é o app. Esta planilha é uma cópia editável.'],
     ['2. Edite apenas as células amarelas das abas Produtos e Config. As abas Historico, Precos e Lista são somente leitura (regeradas a cada exportação).'],
