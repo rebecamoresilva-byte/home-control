@@ -1,0 +1,21 @@
+﻿HOME CONTROL v0.5 - Android (app instalavel)
+=============================================
+
+O celular so instala um app web se ele estiver em um endereco https. Por isso ha 2 passos:
+
+1) PUBLICAR ESTA PASTA (gratis, uma vez)
+   Opcao A - GitHub Pages: crie um repositorio, envie os arquivos desta pasta e ative Settings > Pages.
+   Opcao B - Netlify: em app.netlify.com/drop arraste esta pasta (crie a conta gratis para o site nao expirar).
+   Voce recebe um endereco como https://seu-nome.github.io/home-control/
+
+2) INSTALAR NO CELULAR
+   Abra o endereco no Chrome do Android > menu (3 pontinhos) > "Instalar app" (ou "Adicionar a tela inicial").
+   O HOME CONTROL aparece como aplicativo, com icone, em tela cheia, e funciona sem internet depois do 1o acesso.
+
+QUER UM ARQUIVO .APK DE VERDADE?
+   Com o site publicado, entre em pwabuilder.com, cole o endereco e baixe o pacote Android gerado.
+
+DADOS
+   Nesta versao, o celular e o PC guardam dados separados. Para passar de um para o outro:
+   Excel e backup > Baixar backup (.json) em um, e Restaurar backup no outro.
+   A sincronizacao automatica entre aparelhos vem na etapa de nuvem com login.
