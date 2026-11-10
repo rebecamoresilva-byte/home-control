@@ -204,6 +204,34 @@ table.t{width:100%;border-collapse:collapse;background:var(--card)}
 .pimg.click{cursor:pointer;position:relative}.pimg.click:hover{outline:2px solid var(--gr)}
 .t td.em{width:46px}
 /* consumo rápido */
+.hscroll{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.hscroll > *{flex:0 0 auto}
+.badge.c-bl{color:var(--bl,#2563eb)}
+.t th.stk,.t td.stk{position:sticky;left:0;z-index:2;background:var(--card);box-shadow:2px 0 0 var(--g2)}
+.t th.stk{z-index:3;background:var(--bk)}
+:root[data-theme="dark"] .t th.stk{background:#1b1c1f}
+.pcell{display:flex;align-items:center;gap:8px;min-width:150px}
+.pcell .nm{font-weight:700}
+.t td.center,.t th.center{text-align:center}
+.cellin{width:86px;text-align:center;border:1px dashed var(--g3);border-radius:6px;padding:4px;background:transparent;color:inherit;font:inherit}
+.cellin::placeholder{color:var(--ye);font-weight:700;opacity:1}
+.cellin:focus{border-style:solid;border-color:var(--gr);outline:0}
+.dura b,.dura .small{white-space:nowrap}
+.vale-card .vtop{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.vale-card .vbig{font-size:30px;font-weight:800;line-height:1}
+.vbar{position:relative;height:12px;border-radius:99px;background:var(--g2);margin:12px 0 6px;overflow:visible}
+.vbar .fi{height:100%;border-radius:99px;background:var(--gr)}
+.vbar .fi.over{background:var(--re)}
+.vbar .mk{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--tx,#111)}
+.vale-card .vin{display:flex;gap:8px;margin-top:10px}
+.vale-card .vin input{flex:1;min-width:0;font-size:16px;padding:10px 12px;border:2px solid var(--g3);border-radius:10px;background:var(--card);color:inherit}
+.mylist{display:flex;flex-direction:column;gap:8px}
+.mylist .mcard{grid-template-columns:30px 46px 1fr auto}
+.montrow{display:grid;grid-template-columns:28px 40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 4px;border-bottom:1px solid var(--g2)}
+.montrow input[type=checkbox]{width:22px;height:22px;accent-color:var(--gr)}
+.montrow .step button{width:36px;height:36px;font-size:18px}.montrow .step input{width:44px;height:36px}
+.montadd{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.montadd select{flex:1 1 200px;min-width:0}
 .cbar{display:flex;gap:10px;align-items:center;margin-bottom:10px}
 .cbar .bigsearch{flex:1;position:relative}
 .cbar .bigsearch input{width:100%;font-size:16px;padding:12px 14px 12px 42px;border:2px solid var(--bk);border-radius:10px}
@@ -345,6 +373,8 @@ table.t{width:100%;border-collapse:collapse;background:var(--card)}
   .hbar{grid-template-columns:96px 1fr 62px}
   .fgrid{grid-template-columns:repeat(3,1fr)}
   .cattabs .cattab{min-width:80px}
+  .pcell{min-width:118px;max-width:140px}.pcell .nm{white-space:normal;font-size:12.5px}
+  .vale-card .vbig{font-size:26px}
   .card{padding:12px}
   .t td,.t th{padding:6px}
 }
@@ -644,7 +674,9 @@ function computeAll(){
     let rate = null, fonte = null, conf = null;
     const lim = addDays(t0, -120).toISOString();
     const cons = s.consumos.filter(m => m.data >= lim);
-    if (cons.length >= 2) {
+    const apr = aprendeDuracao(p.id, s.consumos, s.compras); s.apr = apr;
+    if (apr && apr.dias) { rate = 1 / apr.dias; fonte = 'padrão de consumo aprendido'; conf = apr.conf; }
+    else if (cons.length >= 2) {
       const first = cons.reduce((a, m) => m.data < a ? m.data : a, cons[0].data);
       const span = Math.max(7, daysBetween(new Date(first), new Date()));
       rate = cons.reduce((a, m) => a + m.qtd, 0) / span; fonte = 'consumo registrado'; conf = cons.length >= 5 ? 'alta' : 'média';
@@ -669,11 +701,37 @@ function computeAll(){
     s.freq = ref == null ? null : ref <= 10 ? 'Semanal' : ref <= 20 ? 'Quinzenal' : ref <= 45 ? 'Mensal' : ref <= 75 ? 'Bimestral' : ref <= 120 ? 'Trimestral' : 'Semestral';
     s.freqRef = iv == null;
     s.preco = priceInfo(p.id);
+    s.diasUn = s.apr && s.apr.dias ? s.apr.dias : (p.qtdIdeal > 0 && p.prazo > 0 ? Math.round(p.prazo / p.qtdIdeal * 10) / 10 : null);
+    s.diasUnAprendido = !!(s.apr && s.apr.dias);
+    if (!p.conteudo && s.compras.length) { const lc = s.compras.slice().sort((a, b) => a.data < b.data ? 1 : -1).find(m => m.conteudo); s.conteudoUlt = lc ? lc.conteudo : ''; }
   }
   CACHE = map;
   return map;
 }
 const ST = id => CACHE[id];
+// aprende quantos dias dura 1 unidade: intervalo entre a entrada (compra ou consumo anterior) e cada consumo.
+// só vale depois de repetir o padrão (2+ medições parecidas).
+function aprendeDuracao(pid, consumos, compras){
+  const dias = {};
+  consumos.forEach(m => { const k = m.data.slice(0, 10); dias[k] = (dias[k] || 0) + m.qtd; });
+  const ev = Object.entries(dias).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  if (!ev.length) return null;
+  const amostras = [];
+  let ini = null;
+  const cs = compras.map(m => m.data.slice(0, 10)).sort();
+  const c1 = cs.filter(d => d <= ev[0][0]).pop();
+  if (c1) ini = c1;
+  for (const [d, q] of ev) {
+    if (ini && q > 0) { const n = daysBetween(new Date(ini + 'T12:00'), new Date(d + 'T12:00')); if (n >= 1) amostras.push(n / q); }
+    ini = d;
+  }
+  if (amostras.length < 2) return {n: amostras.length, dias: null};
+  const ord = amostras.slice(-8).sort((a, b) => a - b);
+  const med = ord[Math.floor(ord.length / 2)];
+  const perto = ord.filter(x => x >= med / 2 && x <= med * 2).length;
+  if (perto < 2) return {n: amostras.length, dias: null, instavel: true};
+  return {n: amostras.length, dias: Math.round(med * 10) / 10, conf: perto >= 4 ? 'alta' : 'média'};
+}
 
 /* ====================================================================== LISTA DE MERCADO (DECISÃO) */
 const PRIO = ['CRÍTICA','ALTA','NORMAL','BAIXA'];
@@ -743,8 +801,41 @@ function buildPlan(){
   }
   return {items, conferir, c0, c1, gasto, saldo, totalAtual: acc};
 }
+function gastoRegistrado(c, ate){
+  return DB.movs.filter(m => m.tipo === 'COMPRA' && new Date(m.data) >= c.ini && new Date(m.data) < c.fim && (!ate || m.data <= ate)).reduce((a, m) => a + (m.total || 0), 0);
+}
+function saldoInfo(c){ const si = DB.config.saldoInf; if (!si) return null; const d = new Date(si.em); return d >= c.ini && d < c.fim ? si : null; }
+// gasto que saiu do vale sem registro de produtos: vale − saldo informado − compras registradas até aquele momento
+function semRegistro(c){ const si = saldoInfo(c); return si ? Math.max(0, Math.round((DB.config.vale - si.valor - gastoRegistrado(c, si.em)) * 100) / 100) : 0; }
+function saldoVale(){
+  const c = cycleN(0), si = saldoInfo(c);
+  if (si) return si.valor - DB.movs.filter(m => m.tipo === 'COMPRA' && m.data > si.em && new Date(m.data) < c.fim).reduce((a, m) => a + (m.total || 0), 0);
+  return DB.config.vale - gastoCiclo(c);
+}
+function informarSaldo(){
+  const v = pnum($('#vsaldo').value);
+  if (v == null || v < 0) return toast('Digite quanto tem no vale agora (ex.: 170).');
+  const c = cycleN(0), reg = gastoRegistrado(c);
+  if (v > DB.config.vale && !confirm('O saldo informado é maior que o vale do ciclo (' + brl(DB.config.vale) + '). Salvar mesmo assim?')) return;
+  DB.config.saldoInf = {valor: v, em: new Date().toISOString(), por: quem()};
+  logAct('Orçamento', 'Saldo do vale informado: ' + brl(v) + ' (registrado no ciclo até agora: ' + brl(reg) + ')');
+  save(); toast('Saldo atualizado ✓'); render();
+}
+function limparSaldo(){ if (!confirm('Voltar a calcular o saldo só pelas compras registradas?')) return; delete DB.config.saldoInf; save(); render(); }
+function valeCard(){
+  const c = cycleN(0), si = saldoInfo(c), reg = gastoRegistrado(c), sr = semRegistro(c), g = reg + sr, sv = saldoVale();
+  const V = DB.config.vale || 1, M = DB.config.meta;
+  const pct = Math.min(100, Math.max(0, g / V * 100)), mk = Math.min(100, M / V * 100);
+  return `<div class="card vale-card"><h3>${IC.wallet.replace('<svg','<svg width="18"')} Saldo do vale agora <span class="r small muted">ciclo ${cycLabel(c)}</span></h3>
+    <div class="vtop"><div class="vbig ${sv < DB.config.vale - M ? 'c-re' : 'c-gr'}">${brl(sv)}</div>
+      <div class="small muted">de ${brl(DB.config.vale)} · ${si ? 'informado em ' + fdt(si.em) + (si.por ? ' por ' + esc(si.por) : '') + ' <a href="#" onclick="limparSaldo();return false">limpar</a>' : 'calculado pelas compras registradas'}</div></div>
+    <div class="vbar"><div class="fi ${g > M ? 'over' : ''}" style="width:${pct}%"></div><div class="mk" style="left:${mk}%" title="Meta ${brl(M)}"></div></div>
+    <div class="small">Gasto no ciclo <b class="c-re">${brl(g)}</b> = registrado ${brl(reg)}${sr ? ' + <b>sem registro ' + brl(sr) + '</b>' : ''} · Meta ${brl(M)} → ${g > M ? '<b class="c-re">acima em ' + brl(g - M) + '</b>' : '<b class="c-gr">sobra ' + brl(M - g) + '</b>'}</div>
+    <div class="vin"><input id="vsaldo" inputmode="decimal" placeholder="Quanto tem no vale agora? (R$)" onkeydown="if(event.key==='Enter')informarSaldo()"><button class="btn green" onclick="informarSaldo()">${IC.check} Atualizar</button></div>
+    <div class="small faint" style="margin-top:6px">Ao informar o saldo, a diferença que não tem produto registrado entra como "sem registro" e a conta do ciclo passa a bater com o vale.</div></div>`;
+}
 function gastoCiclo(c){
-  return DB.movs.filter(m => m.tipo === 'COMPRA' && new Date(m.data) >= c.ini && new Date(m.data) < c.fim).reduce((a, m) => a + (m.total || 0), 0);
+  return semRegistro(c) + DB.movs.filter(m => m.tipo === 'COMPRA' && new Date(m.data) >= c.ini && new Date(m.data) < c.fim).reduce((a, m) => a + (m.total || 0), 0);
 }
 
 /* ====================================================================== NAVEGAÇÃO */
@@ -767,7 +858,7 @@ const UI = {
 };
 function renderSide(){
   $('#side').innerHTML = PAGES.map(p => `<button class="nav ${UI.page === p.id ? 'on' : ''}" title="${p.nome}" onclick="go('${p.id}')">${IC[p.ic]}<span class="lg">${p.nome.replace(' ', '<br>')}</span><span class="sh">${p.sh}</span></button>`).join('')
-    + `<div class="side-foot"><button onclick="openDados()" title="Orçamento e ciclo">⚙<span class="t"> Orçamento e ciclo</span></button><button onclick="openDados('excel')" title="Excel e backup">⇅<span class="t"> Excel e backup</span></button><div class="ver">v0.6.1 · versão de teste · ${fdate(BUILD)}</div></div>`;
+    + `<div class="side-foot"><button onclick="openDados()" title="Orçamento e ciclo">⚙<span class="t"> Orçamento e ciclo</span></button><button onclick="openDados('excel')" title="Excel e backup">⇅<span class="t"> Excel e backup</span></button><div class="ver">v0.7 · versão de teste · ${fdate(BUILD)}</div></div>`;
 }
 const BUILD = '2026-11-09T12:00:00';
 const MKEY = 'homecontrol_menu';
@@ -817,7 +908,7 @@ function ensureDrafts(){
 }
 function pgRegistro(){
   ensureDrafts();
-  const tabs = [['compra','cart','Compra','(Entrada de produtos)'],['consumo','bag','Consumo','(Saída de produtos)'],['ajuste','sliders','Ajuste','(Correção de estoque)']];
+  const tabs = [['compra','cart','Compra','(Entrada de produtos)'],['consumo','bag','Consumo','(Uso e correção rápida)'],['ajuste','sliders','Ajuste','(Correção de estoque)']];
   let body = '';
   if (UI.regTab === 'compra') body = regCompra();
   else if (UI.regTab === 'consumo') body = regConsumo();
@@ -923,18 +1014,17 @@ function doCompra(origem = 'manual', extra = {}){
 /* ---------- CONSUMO RÁPIDO ---------- */
 function ensureCons(){ if (!UI.cons) UI.cons = {q:'', cat:0, emCasa:false, val:{}, data: localISO(new Date()), obs:''}; return UI.cons; }
 function consStep(p){ const s = ST(p.id); return s.conhecido && Math.abs(s.estoque - Math.round(s.estoque)) > 1e-9 ? 0.5 : 1; }
-function consUsado(pid){
-  const C = UI.cons, s = ST(pid), v = C.val[pid];
-  if (v == null) return 0;
-  return s.conhecido ? Math.max(0, Math.round((Math.max(0, s.estoque) - v) * 1000) / 1000) : v;
-}
+const consBase = pid => { const s = ST(pid); return s.conhecido ? Math.max(0, s.estoque) : 0; };
+// diferença entre o número da tela e o estoque registrado: negativo = consumo, positivo = correção para mais
+function consDif(pid){ const v = UI.cons.val[pid]; return v == null ? 0 : Math.round((v - consBase(pid)) * 1000) / 1000; }
+function consMuda(pid){ return UI.cons.val[pid] != null && (consDif(pid) !== 0 || !ST(pid).conhecido); }
 function regConsumo(){
   const C = ensureCons();
   return `<div class="card">
-    <h3>${IC.bag.replace('<svg','<svg width="18"')} O que você usou? <span class="r small muted">Busque, toque em ‹ para diminuir o que sobrou em casa e confirme no fim</span></h3>
-    <div class="cbar"><div class="bigsearch">${IC.search}<input id="cq" placeholder="Digite o nome do produto… (ex.: arroz)" value="${esc(C.q)}" oninput="UI.cons.q=this.value;drawConsList()" autocomplete="off"></div>
+    <h3>${IC.bag.replace('<svg','<svg width="18"')} Consumo e correção rápida <span class="r small muted">O número é o que você tem em casa · <b>‹</b> usei · <b>›</b> corrigir para mais</span></h3>
+    <div class="cbar"><div class="bigsearch">${IC.search}<input id="cq" placeholder="Buscar produto… (ex.: arroz)" value="${esc(C.q)}" oninput="UI.cons.q=this.value;drawConsList()" autocomplete="off" enterkeyhint="search"></div>
       <label class="chipf ${C.emCasa ? 'on' : ''}" style="display:flex;gap:6px;align-items:center"><input type="checkbox" style="width:auto;margin:0" ${C.emCasa ? 'checked' : ''} onchange="UI.cons.emCasa=this.checked;this.parentNode.classList.toggle('on',this.checked);drawConsList()"> Só o que tenho em casa</label></div>
-    <div class="row" style="gap:6px;margin-bottom:10px">${[{id:0, curto:'Todas', em:''}].concat(CATS).map(c => `<span class="chipf ${C.cat === c.id ? 'on' : ''}" onclick="UI.cons.cat=${c.id};document.querySelectorAll('.cchip').forEach(e=>e.classList.toggle('on',+e.dataset.c===${c.id}));drawConsList()" data-c="${c.id}" class="cchip">${c.em} ${esc(c.curto)}</span>`).join('').replace(/class="chipf/g, 'class="cchip chipf')}</div>
+    <div class="hscroll">${[{id:0, curto:'Todas', em:''}].concat(CATS).map(c => `<span class="cchip chipf ${C.cat === c.id ? 'on' : ''}" onclick="UI.cons.cat=${c.id};document.querySelectorAll('.cchip').forEach(e=>e.classList.toggle('on',+e.dataset.c===${c.id}));drawConsList()" data-c="${c.id}">${c.em} ${esc(c.curto)}</span>`).join('')}</div>
     <div class="clist" id="consList"></div>
     <div class="sticky" id="consBar"></div>
   </div>`;
@@ -944,16 +1034,23 @@ function consFiltered(){
   return DB.products.filter(p => p.status !== 'DESC' && (!C.cat || p.cat === C.cat) && (!q || norm(p.nome + ' ' + p.marca).includes(q)) && (!C.emCasa || (ST(p.id).conhecido && ST(p.id).estoque > 0)))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
+function consBadge(pid){
+  if (!consMuda(pid)) return ['faint', '—'];
+  const d = consDif(pid);
+  if (!ST(pid).conhecido) return ['c-bl', 'contado: ' + fnum(UI.cons.val[pid])];
+  return d < 0 ? ['c-re', '−' + fnum(-d) + ' usado'] : ['c-bl', '+' + fnum(d) + ' correção'];
+}
 function consRow(p){
-  const C = UI.cons, s = ST(p.id), u = consUsado(p.id);
-  const val = C.val[p.id] != null ? C.val[p.id] : (s.conhecido ? Math.max(0, s.estoque) : 0);
-  return `<div class="crow ${u > 0 ? 'ch' : ''}" id="cr_${p.id}">
+  const C = UI.cons, s = ST(p.id), mud = consMuda(p.id);
+  const val = C.val[p.id] != null ? C.val[p.id] : consBase(p.id);
+  const [bc, bt] = consBadge(p.id);
+  return `<div class="crow ${mud ? 'ch' : ''}" id="cr_${p.id}">
     ${pimg(p, 44)}
     <div><div class="nm" onclick="UI.selPid='${p.id}';$('#regSide').innerHTML=regSide()">${esc(p.nome)}</div><div class="small muted">${esc(catOf(p.cat).curto)}${p.marca ? ' · ' + esc(p.marca) : ''}</div></div>
-    <div class="small">${s.conhecido ? `Em casa: <b>${fnum(s.estoque)}</b> ${esc(p.unidade)}` : '<span class="pend">estoque não conferido</span>'}</div>
-    <div><div class="small muted" style="margin-bottom:2px">${s.conhecido ? 'Sobrou em casa' : 'Quanto usei'}</div>
-      <span class="step"><button onclick="consBtn('${p.id}',-1)" title="${s.conhecido ? 'Usei (diminuir)' : 'Menos'}">‹</button><input value="${fnum(val, 3)}" onchange="consSet('${p.id}',this.value)" onfocus="this.select()"><button onclick="consBtn('${p.id}',1)" title="${s.conhecido ? 'Desfazer' : 'Mais'}">›</button></span></div>
-    <div class="badge ${u > 0 ? 'c-re' : 'faint'}" id="cb_${p.id}">${u > 0 ? '−' + fnum(u) + ' usado' : '—'}</div></div>`;
+    <div class="small">${s.conhecido ? `Registrado: <b>${fnum(s.estoque)}</b> ${esc(p.unidade)}` : '<span class="pend">estoque não conferido</span>'}</div>
+    <div><div class="small muted" style="margin-bottom:2px">Em casa</div>
+      <span class="step"><button onclick="consBtn('${p.id}',-1)" title="Usei (consumo)">‹</button><input value="${fnum(val, 3)}" inputmode="decimal" onchange="consSet('${p.id}',this.value)" onfocus="this.select()"><button onclick="consBtn('${p.id}',1)" title="Corrigir para mais">›</button></span></div>
+    <div class="badge ${bc}" id="cb_${p.id}">${bt}</div></div>`;
 }
 function drawConsList(){
   const el = $('#consList'); if (!el) return;
@@ -961,50 +1058,51 @@ function drawConsList(){
   el.innerHTML = ps.length ? ps.map(consRow).join('') : `<div class="empty">Nenhum produto encontrado. <a href="#" onclick="newProductModal({cat:UI.cons.cat||1,nome:UI.cons.q});return false">+ Cadastrar "${esc(UI.cons.q)}"</a></div>`;
   drawConsBar();
 }
+function consMudancas(){ return Object.keys(UI.cons.val).filter(pid => prodById(pid) && consMuda(pid)).map(pid => ({p: prodById(pid), d: consDif(pid), v: UI.cons.val[pid], conh: ST(pid).conhecido})); }
 function drawConsBar(){
   const el = $('#consBar'); if (!el) return;
-  const C = UI.cons;
-  const ch = Object.keys(C.val).map(pid => ({p: prodById(pid), u: consUsado(pid)})).filter(x => x.p && x.u > 0);
+  const C = UI.cons; const ch = consMudancas();
   el.innerHTML = ch.length
-    ? `<b>${ch.length} produto(s):</b><span class="small" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${ch.map(x => esc(x.p.nome) + ' <b class="c-re">−' + fnum(x.u) + '</b>').join(' · ')}</span>
+    ? `<b>${ch.length} produto(s):</b><span class="small" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${ch.map(x => esc(x.p.nome) + ' ' + (!x.conh ? '<b class="c-bl">= ' + fnum(x.v) + '</b>' : x.d < 0 ? '<b class="c-re">−' + fnum(-x.d) + '</b>' : '<b class="c-bl">+' + fnum(x.d) + '</b>')).join(' · ')}</span>
        <input type="datetime-local" value="${C.data}" onchange="UI.cons.data=this.value" style="border:1px solid var(--g3);border-radius:7px;padding:6px">
        <input placeholder="obs. (ex.: venceu)" value="${esc(C.obs)}" oninput="UI.cons.obs=this.value" style="border:1px solid var(--g3);border-radius:7px;padding:6px;width:150px">
        <button class="btn" onclick="UI.cons.val={};drawConsList()">Desfazer</button>
-       <button class="btn green" onclick="doConsumo()">${IC.check} Confirmar consumo</button>`
-    : `<span class="muted">Nada marcado ainda. Busque o produto e toque em <b>‹</b> a cada unidade usada.</span>`;
+       <button class="btn green" onclick="doConsumo()">${IC.check} Confirmar</button>`
+    : `<span class="muted">Nada alterado ainda. Toque em <b>‹</b> para cada unidade usada, ou em <b>›</b> para corrigir um número que ficou errado.</span>`;
 }
 function consApply(pid){
   const r = document.getElementById('cr_' + pid); if (!r) return drawConsBar();
   r.outerHTML = consRow(prodById(pid)); drawConsBar();
 }
+function consFix(pid, nv){
+  const C = UI.cons;
+  nv = Math.max(0, Math.round(nv * 1000) / 1000);
+  if (ST(pid).conhecido && nv === consBase(pid)) delete C.val[pid]; else C.val[pid] = nv;
+}
 function consBtn(pid, dir){
-  const C = UI.cons, s = ST(pid), p = prodById(pid), st = consStep(p);
-  if (s.conhecido) {
-    const max = Math.max(0, s.estoque); const cur = C.val[pid] != null ? C.val[pid] : max;
-    let nv = Math.round((cur + dir * st) * 1000) / 1000;
-    if (nv < 0) { toast('Já está zerado. Se usou mais do que o registrado, faça um Ajuste.'); nv = 0; }
-    if (nv > max) { nv = max; toast('Para aumentar o estoque use Compra ou Ajuste.'); }
-    C.val[pid] = nv; if (nv === max) delete C.val[pid];
-  } else {
-    const cur = C.val[pid] || 0; const nv = Math.max(0, cur + dir * st); if (nv) C.val[pid] = nv; else delete C.val[pid];
-  }
-  consApply(pid);
+  const C = UI.cons, p = prodById(pid), st = consStep(p);
+  const cur = C.val[pid] != null ? C.val[pid] : consBase(pid);
+  if (dir < 0 && cur <= 0) return toast('Já está em zero.');
+  consFix(pid, cur + dir * st); consApply(pid);
 }
 function consSet(pid, v){
-  const n = pnum(v); const s = ST(pid);
-  if (n == null || n < 0) { delete UI.cons.val[pid]; return consApply(pid); }
-  if (s.conhecido) { const max = Math.max(0, s.estoque); if (n > max) { toast('Para aumentar o estoque use Compra ou Ajuste.'); } UI.cons.val[pid] = Math.min(n, max); if (UI.cons.val[pid] === max) delete UI.cons.val[pid]; }
-  else UI.cons.val[pid] = n;
+  const n = pnum(v);
+  if (n == null || n < 0) delete UI.cons.val[pid]; else consFix(pid, n);
   consApply(pid);
 }
 function doConsumo(){
   const C = UI.cons; const data = dtInput(C.data); const oid = uid('S');
-  const ch = Object.keys(C.val).map(pid => ({p: prodById(pid), u: consUsado(pid)})).filter(x => x.p && x.u > 0);
-  if (!ch.length) return toast('Nada marcado.');
-  for (const {p, u} of ch) DB.movs.push({id: uid('m'), tipo:'CONSUMO', opId: oid, pid: p.id, nome: p.nome, qtd: u, delta: -u, unidade: p.unidade, data, obs: C.obs || '', origem:'manual', registrado: new Date().toISOString(), por: quem()});
-  save(); UI.cons = null; toast('Consumo de ' + ch.length + ' produto(s) registrado ✓'); render();
+  const ch = consMudancas();
+  if (!ch.length) return toast('Nada alterado.');
+  let nc = 0, na = 0;
+  for (const {p, d, v, conh} of ch) {
+    if (conh && d < 0) { nc++; DB.movs.push({id: uid('m'), tipo:'CONSUMO', opId: oid, pid: p.id, nome: p.nome, qtd: -d, delta: d, unidade: p.unidade, data, obs: C.obs || '', origem:'manual', registrado: new Date().toISOString(), por: quem()}); }
+    else { na++; addAjuste(p.id, v, conh ? 'Correção rápida' : 'Conferência', C.obs || '', data); }
+  }
+  save(); UI.cons = null;
+  toast((nc ? nc + ' consumo(s)' : '') + (nc && na ? ' e ' : '') + (na ? na + ' correção(ões)' : '') + ' registrado(s) ✓'); render();
 }
-function afterRegistro(){ if (UI.regTab === 'consumo') { drawConsList(); const q = $('#cq'); if (q && !UI._noFocus) { q.focus(); q.setSelectionRange(99, 99); } } }
+function afterRegistro(){ if (UI.regTab === 'consumo') drawConsList(); }
 
 /* ---------- NFC-e pelo QR Code ---------- */
 const JSQR_URL = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
@@ -1430,21 +1528,19 @@ function pgProdutos(){
   let rows = ps.filter(p => p.cat === cat.id);
   if (UI.prodSearch) { const q = norm(UI.prodSearch); rows = ps.filter(p => norm(p.nome + ' ' + p.marca).includes(q)); }
   rows = sortRows(rows, UI.prodSort, {
-    nome: p => p.nome, estoque: p => ST(p.id).conhecido ? ST(p.id).estoque : -1, qtd: p => p.qtdIdeal ?? -1, prazo: p => p.prazo ?? -1,
+    nome: p => p.nome, estoque: p => ST(p.id).conhecido ? ST(p.id).estoque : -1, qtd: p => p.qtdIdeal ?? -1, prazo: p => ST(p.id).diasUn ?? -1,
     ult: p => ST(p.id).ultCompra || '', preco: p => ST(p.id).preco.mediaEmb ?? -1, status: p => p.status, marca: p => p.marca});
-  const th = (k, l) => `<th class="s" onclick="toggleSort('prodSort','${k}')">${l}${UI.prodSort && UI.prodSort.k === k ? (UI.prodSort.d > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  const th = (k, l, cl = '') => `<th class="s ${cl}" onclick="toggleSort('prodSort','${k}')">${l}${UI.prodSort && UI.prodSort.k === k ? (UI.prodSort.d > 0 ? ' ▲' : ' ▼') : ''}</th>`;
   const tbody = rows.map(p => {
     const s = ST(p.id); const st = STATUS[p.status];
     return `<tr style="${p.status === 'DESC' ? 'opacity:.55' : ''}">
-      <td class="em">${pimg(p, 38, true)}</td>
-      <td class="nm">${esc(p.nome)}${p.obs ? ` <span class="pend" title="${esc(p.obs)}">ⓘ</span>` : ''}${p.adicional ? ' <span class="pill p-bl">adicional</span>' : ''}</td>
+      <td class="stk"><div class="pcell">${pimg(p, 38, true)}<span class="nm">${esc(p.nome)}${p.obs ? ` <span class="pend" title="${esc(p.obs)}">ⓘ</span>` : ''}${p.adicional ? ' <span class="pill p-bl">adicional</span>' : ''}</span></div></td>
       <td><span class="stbtns">${Object.entries(STATUS).map(([k, v]) => `<button class="${p.status === k ? 'on ' + v[3] : ''}" title="${v[1]}" onclick="setStatus('${p.id}','${k}')">${v[0]}</button>`).join('')}</span></td>
       <td style="cursor:pointer" onclick="editEstoque('${p.id}')" title="Clique para ajustar">${s.conhecido ? `<b class="${s.sit === 'zerado' ? 'c-re' : s.sit === 'baixo' ? 'c-ye' : ''}">${fnum(s.estoque)}</b> <span class="small muted">${esc(p.unidade)}</span>` : '<span class="pill p-gy">conferir</span>'}</td>
       <td>${esc(p.marca) || '<span class="faint">—</span>'}</td>
-      <td class="muted">${esc(catOf(p.cat).curto)}</td>
       <td class="center">${pendTag(p.qtdIdeal) ?? fnum(p.qtdIdeal)}</td>
-      <td>${pendTag(p.conteudo) ?? esc(p.conteudo)}</td>
-      <td class="center">${pendTag(p.prazo) ?? p.prazo}</td>
+      <td class="center"><input class="cellin" value="${esc(p.conteudo || '')}" placeholder="${esc(s.conteudoUlt || 'x')}" title="Peso/conteúdo da embalagem (ex.: 1 kg, 500 g, 2 L)" onchange="setConteudo('${p.id}',this.value)"></td>
+      <td class="center dura">${s.diasUn != null ? `<b>1 ${esc(p.unidade)} ≈ ${fnum(s.diasUn, 1)} dia${s.diasUn === 1 ? '' : 's'}</b><div class="small ${s.diasUnAprendido ? 'c-gr' : 'faint'}">${s.diasUnAprendido ? 'aprendido · ' + s.apr.n + ' medições' : s.apr && s.apr.n ? 'aprendendo (' + s.apr.n + '/2)' : '(ref.)'}</div>` : (s.apr && s.apr.n ? `<span class="small faint">aprendendo (${s.apr.n}/2)</span>` : '<span class="pend">x</span>')}</td>
       <td>${s.freq ? `${IC.cal.replace('<svg','<svg width="13" style="vertical-align:-2px"')} ${s.freq}${s.freqRef ? '<span class="faint small"> (ref.)</span>' : ''}` : '—'}</td>
       <td>${fdate(s.ultCompra)}</td>
       <td class="right">${s.preco.n ? brl(s.preco.mediaEmb) : '<span class="faint">—</span>'}</td>
@@ -1470,9 +1566,15 @@ function pgProdutos(){
       <div class="cattab plus" title="Cadastrar produto novo" onclick="newProductModal({cat:UI.catTab})">+</div></div>
     <div class="row" style="margin-bottom:8px"><b style="font-size:15px">${UI.prodSearch ? 'Resultado da busca' : cat.em + ' ' + cat.id + '. ' + esc(cat.nome)}</b>
       <span style="margin-left:auto" class="small muted">Status do Produto:</span><span class="pill p-gr">👍 Normal (GO)</span><span class="pill p-ye">🫸 Pausado</span><span class="pill p-re">👎 Descontinuado</span></div>
-    <div class="tw"><table class="t"><thead><tr><th></th>${th('nome','Produto')}${th('status','Status')}${th('estoque','Estoque')}${th('marca','Marca')}<th>Categoria</th>${th('qtd','QTD')}<th>Peso/Unid.</th>${th('prazo','Prazo (dias)')}<th>Frequência</th>${th('ult','Última compra')}${th('preco','Preço médio')}<th>Mín.</th><th>Un.</th><th>Aplicação</th><th></th></tr></thead>
-    <tbody>${tbody || `<tr><td colspan="16" class="empty">Nenhum produto nesta categoria. <a href="#" onclick="newProductModal({cat:UI.catTab});return false">+ Cadastrar produto</a></td></tr>`}</tbody>
-    <tfoot><tr><td colspan="16"><button class="btn sm" onclick="newProductModal({cat:UI.catTab})">${IC.plus} Adicionar produto nesta categoria</button> <span class="small muted" style="margin-left:8px"><span class="pend">x</span> = dado pendente (não informado). Clique no estoque para ajustar; no lápis para editar.</span></td></tr></tfoot></table></div>`;
+    <div class="tw"><table class="t"><thead><tr>${th('nome','Produto','stk')}${th('status','Status')}${th('estoque','Estoque')}${th('marca','Marca')}${th('qtd','QTD','center')}<th class="center">Peso/Unid.</th>${th('prazo','Duração por unidade','center')}<th>Frequência</th>${th('ult','Última compra')}${th('preco','Preço médio')}<th>Mín.</th><th>Un.</th><th>Aplicação</th><th></th></tr></thead>
+    <tbody>${tbody || `<tr><td colspan="15" class="empty">Nenhum produto nesta categoria. <a href="#" onclick="newProductModal({cat:UI.catTab});return false">+ Cadastrar produto</a></td></tr>`}</tbody>
+    <tfoot><tr><td colspan="15"><button class="btn sm" onclick="newProductModal({cat:UI.catTab})">${IC.plus} Adicionar produto nesta categoria</button> <span class="small muted" style="margin-left:8px"><span class="pend">x</span> = dado pendente (não informado). Clique no estoque para ajustar; no lápis para editar. A duração por unidade é aprendida pelo seu consumo depois de 2 medições parecidas.</span></td></tr></tfoot></table></div>`;
+}
+function setConteudo(pid, v){
+  const p = prodById(pid); v = String(v || '').trim();
+  if ((p.conteudo || '') === v) return;
+  logAct('Produto', p.nome + ': peso/conteúdo ' + (p.conteudo || '—') + ' → ' + (v || '—'), pid);
+  p.conteudo = v; save(); computeAll(); toast('Peso/conteúdo salvo ✓');
 }
 function toggleSort(k, col){ const s = UI[k]; UI[k] = (s && s.k === col) ? (s.d > 0 ? {k: col, d: -1} : null) : {k: col, d: 1}; render(); }
 function sortRows(rows, sort, getters){
@@ -1873,11 +1975,11 @@ function pgLista(){
      <div class="chips">${P.conferir.map(p => `<span class="pill p-gy">${p.icon} ${esc(p.nome)}</span>`).join('')}</div>
      <div style="margin-top:10px"><button class="btn dark sm" onclick="UI.page='registro';UI.regTab='ajuste';render()">Fazer conferência rápida</button></div></div>` : '';
   return header('lista', 'Itens sugeridos com base no estoque, consumo e meta de gasto',
-      `<button class="btn" onclick="go('precos')">${IC.store} Tabela de Preços</button>
+      `<button class="btn green" onclick="montarLista()">${IC.check} Montar a lista</button>
+       <button class="btn" onclick="go('precos')">${IC.store} Tabela de Preços</button>
        <button class="btn" onclick="exportListaXlsx()">${IC.xls} Exportar Excel</button>
-       <button class="btn green" onclick="printLista()">${IC.print} Imprimir Lista</button>`)
-  + `<div class="kpis" style="grid-template-columns:repeat(6,1fr)">
-      ${kpi('wallet', 'Vale Mensal', brl(DB.config.vale), 'crédito: ' + (DB.config.diaCredito === 'ultimo' ? 'último dia do mês' : 'dia ' + DB.config.diaCredito), '', 'openDados()')}
+       <button class="btn" onclick="printLista()">${IC.print} Imprimir Lista</button>`)
+  + valeCard() + minhaListaCard() + `<div class="kpis" style="grid-template-columns:repeat(5,1fr)">
       ${kpi('target', 'Meta de Gasto', brl(DB.config.meta), 'reserva: ' + brl(res), '', 'openDados()')}
       ${kpi('receipt', 'Gasto no Ciclo', brl(P.gasto), 'confirmado · ' + cycLabel(P.c0), 'c-re')}
       ${kpi('coins', 'Saldo da Meta', brl(P.saldo), 'meta − gasto confirmado', P.saldo < 0 ? 'c-re' : 'c-gr')}
@@ -1897,6 +1999,65 @@ function pgLista(){
       <button class="btn sm green" style="margin-left:8px" onclick="markBought(Object.keys(UI.listSel).filter(k=>UI.listSel[k]))">✓ Comprei os selecionados</button></td></tr></tfoot></table></div>
     ${conferirHtml}
     <div class="small muted" style="margin-top:8px">Prioridade: CRÍTICA = zerado ou acaba em até 3 dias (essencial) · ALTA = abaixo do mínimo ou acaba em até 7 dias · NORMAL = repor neste ciclo · BAIXA = abaixo do ideal, mas dá para esperar. Previsões sem histórico usam o prazo cadastrado (confiança baixa).</div>`;
+}
+function precoEst(pid){ const it = UI._plan && UI._plan.items.find(i => i.p.id === pid); if (it && it.precoEmb != null) return it.precoEmb; const pr = ST(pid).preco; return pr.n ? pr.mediaEmb : null; }
+function minhaLista(){ return DB.lista && DB.lista.itens ? DB.lista.itens.filter(i => prodById(i.pid)) : []; }
+function minhaListaCard(){
+  const L = minhaLista();
+  if (!L.length) return `<div class="card row" style="justify-content:space-between"><span><b>Minha lista</b> <span class="small muted">· ainda não montada. Toque em "Montar a lista" para escolher o que vai para o mercado.</span></span><button class="btn green sm" onclick="montarLista()">${IC.check} Montar a lista</button></div>`;
+  const tot = L.reduce((a, i) => a + (precoEst(i.pid) || 0) * i.qtd, 0);
+  const ok = L.filter(i => i.ok).length;
+  return `<div class="card"><h3>${IC.cart.replace('<svg','<svg width="18"')} Minha lista (${L.length} itens · estimado ${brl(tot)})<span class="r small muted">montada em ${fdt(DB.lista.criada)}</span></h3>
+    <div class="mylist">${L.map(i => { const p = prodById(i.pid), pe = precoEst(i.pid);
+      return `<div class="mcard ${i.ok ? 'done' : ''}"><input type="checkbox" ${i.ok ? 'checked' : ''} onchange="listaOk('${p.id}',this.checked)">${pimg(p, 46)}
+        <div class="mb"><div class="nm">${esc(p.nome)}</div><div class="small"><b>${fnum(i.qtd)} ${esc(p.unidade)}</b> · ${pe != null ? brl(pe * i.qtd) : '<span class="faint">sem preço</span>'}</div></div>
+        <button class="iconbtn" title="Tirar da lista" onclick="listaTirar('${p.id}')">✕</button></div>`; }).join('')}</div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap"><button class="btn" onclick="montarLista()">${IC.pen.replace('<svg','<svg width="14" height="14"')} Editar lista</button><button class="btn" onclick="printLista()">${IC.print} Imprimir</button><button class="btn" onclick="if(confirm('Apagar a lista montada?')){DB.lista=null;save();render()}">Limpar</button>
+      <span style="margin-left:auto"></span><button class="btn green" onclick="listaComprei()">✓ Comprei os marcados (${ok})</button></div></div>`;
+}
+function listaOk(pid, v){ const i = minhaLista().find(x => x.pid === pid); if (i) { i.ok = v; save(); render(); } }
+function listaTirar(pid){ DB.lista.itens = DB.lista.itens.filter(x => x.pid !== pid); save(); render(); }
+function listaComprei(){
+  const ids = minhaLista().filter(i => i.ok).map(i => i.pid);
+  if (!ids.length) return toast('Marque os itens que você pegou.');
+  const qt = {}; minhaLista().forEach(i => qt[i.pid] = i.qtd);
+  DB.lista.itens = DB.lista.itens.filter(i => !i.ok); save();
+  markBought(ids); if (UI.draft) UI.draft.lines.forEach(l => { if (qt[l.pid]) l.qtd = qt[l.pid]; }); render();
+}
+function montarLista(){
+  const P = UI._plan || buildPlan(); UI._plan = P;
+  const atual = minhaLista(); const rows = []; const seen = new Set();
+  const push = (pid, qtd, on, motivo, grupo) => { if (seen.has(pid)) return; seen.add(pid); rows.push({pid, qtd: qtd || 1, on, motivo, grupo}); };
+  atual.forEach(i => { const it = P.items.find(x => x.p.id === i.pid); push(i.pid, i.qtd, true, it ? it.motivo : 'Adicionado por você', 'lista'); });
+  P.items.filter(i => i.atual).forEach(i => push(i.p.id, i.qtd, !atual.length, i.motivo + ' · ' + i.prio, 'sug'));
+  P.items.filter(i => !i.atual).forEach(i => push(i.p.id, i.qtd, false, i.motivo + ' · ciclo ' + fdm(i.ciclo.ini), 'prox'));
+  UI.mont = {rows};
+  modal('Montar a lista do mercado', '<div id="montBody"></div>', `<span class="small muted" id="montTot" style="margin-right:auto"></span><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn green" onclick="salvarMontagem()">${IC.check} Salvar lista</button>`, true);
+  drawMont();
+}
+function drawMont(){
+  const M = UI.mont; const el = $('#montBody'); if (!el) return;
+  const row = (r, i) => { const p = prodById(r.pid), pe = precoEst(r.pid);
+    return `<div class="montrow"><input type="checkbox" ${r.on ? 'checked' : ''} onchange="UI.mont.rows[${i}].on=this.checked;montTot()">${pimg(p, 40)}
+      <div style="min-width:0"><div class="nm" style="font-weight:700">${esc(p.nome)}</div><div class="small muted">${esc(r.motivo || '')}${pe != null ? ' · ' + brl(pe) + '/' + esc(p.unidade) : ''}</div></div>
+      <span class="step"><button onclick="montQ(${i},-1)">‹</button><input value="${fnum(r.qtd)}" inputmode="decimal" onchange="UI.mont.rows[${i}].qtd=Math.max(0.5,pnum(this.value)||1);UI.mont.rows[${i}].on=true;drawMont()"><button onclick="montQ(${i},1)">›</button></span></div>`; };
+  const grp = (g, t) => { const rs = M.rows.map((r, i) => [r, i]).filter(([r]) => r.grupo === g); return rs.length ? `<div class="small" style="font-weight:800;margin:12px 0 2px;text-transform:uppercase;letter-spacing:.04em">${t}</div>` + rs.map(([r, i]) => row(r, i)).join('') : ''; };
+  el.innerHTML = `<div class="small muted">Marque ☑ o que vai para o mercado. As sugestões vêm do estoque, do consumo e da meta.</div>`
+    + grp('lista', 'Já na sua lista') + grp('sug', 'Sugerido para este ciclo') + grp('add', 'Adicionados agora') + grp('prox', 'Pode esperar (próximos ciclos)')
+    + (M.rows.length ? '' : '<div class="empty">Sem sugestões ainda (confira o estoque para o app calcular). Adicione abaixo.</div>')
+    + `<div class="montadd"><select id="montSel">${prodOptions('', false, p => !M.rows.some(r => r.pid === p.id))}</select>
+        <button class="btn" onclick="montAdd()">${IC.plus} Adicionar</button>
+        <button class="btn" onclick="closeModal();newProductModal({cat:1})">${IC.plus} Produto novo</button></div>`;
+  montTot();
+}
+function montQ(i, d){ const r = UI.mont.rows[i]; r.qtd = Math.max(0.5, Math.round((r.qtd + d) * 10) / 10); r.on = true; drawMont(); }
+function montAdd(){ const v = $('#montSel').value; if (!v) return toast('Escolha um produto.'); UI.mont.rows.push({pid: v, qtd: 1, on: true, motivo: 'Adicionado por você', grupo: 'add'}); drawMont(); }
+function montTot(){ const r = UI.mont.rows.filter(x => x.on); const t = r.reduce((a, x) => a + (precoEst(x.pid) || 0) * x.qtd, 0); const e = $('#montTot'); if (e) e.innerHTML = `<b>${r.length}</b> item(ns) · estimado <b>${brl(t)}</b>`; }
+function salvarMontagem(){
+  const old = {}; minhaLista().forEach(i => old[i.pid] = i.ok);
+  const itens = UI.mont.rows.filter(r => r.on).map(r => ({pid: r.pid, qtd: r.qtd, ok: !!old[r.pid]}));
+  DB.lista = itens.length ? {criada: new Date().toISOString(), por: quem(), itens} : null;
+  logAct('Lista', 'Lista montada com ' + itens.length + ' item(ns)'); save(); closeModal(); toast('Lista salva ✓'); render();
 }
 function mCard(it){
   const p = it.p;
@@ -1938,9 +2099,12 @@ function markBought(ids){
 function printLista(){
   const P = UI._plan || buildPlan();
   const ids = Object.keys(UI.listSel).filter(k => UI.listSel[k]);
-  const its = ids.length ? P.items.filter(i => ids.includes(i.p.id)) : P.items.filter(i => i.atual);
+  const L = minhaLista();
+  const its = ids.length ? P.items.filter(i => ids.includes(i.p.id))
+    : L.length ? L.map(i => { const it = P.items.find(x => x.p.id === i.pid); const pr = ST(i.pid).preco; const pe = precoEst(i.pid); return {p: prodById(i.pid), qtd: i.qtd, valor: pe != null ? pe * i.qtd : null, pr: it ? it.pr : pr}; })
+    : P.items.filter(i => i.atual);
   const tot = its.reduce((a, i) => a + (i.valor || 0), 0);
-  $('#printArea').innerHTML = `<h2>HOME CONTROL · Lista de Mercado</h2><div>${ids.length ? 'Itens selecionados' : 'Ciclo atual (' + cycLabel(P.c0) + ')'} · impresso em ${fdt(new Date())} · saldo da meta: ${brl(P.saldo)}</div>
+  $('#printArea').innerHTML = `<h2>HOME CONTROL · Lista de Mercado</h2><div>${ids.length ? 'Itens selecionados' : L.length ? 'Minha lista' : 'Ciclo atual (' + cycLabel(P.c0) + ')'} · impresso em ${fdt(new Date())} · saldo da meta: ${brl(P.saldo)}</div>
     <table><thead><tr><th style="width:24px"></th><th style="width:40px"></th><th>Produto</th><th>Qtd</th><th>Melhor local</th><th style="text-align:right">Estimado</th></tr></thead><tbody>
     ${its.map(i => `<tr><td><span class="bx"></span></td><td>${pimg(i.p, 30)}</td><td>${esc(i.p.nome)}</td><td>${i.qtd != null ? fnum(i.qtd) + ' ' + esc(i.p.unidade) : '?'}</td><td>${esc(i.pr.n ? (i.pr.recentLocal || i.pr.bestLocal) : '')}</td><td style="text-align:right">${brl(i.valor)}</td></tr>`).join('')}
     </tbody></table><p style="text-align:right;font-weight:bold">Total estimado: ${brl(tot)}</p>`;
@@ -1965,6 +2129,7 @@ function pgDash(){
   // gráfico 3: gastos por categoria no ciclo
   const c0 = P.c0; const gc = {};
   compras.filter(m => new Date(m.data) >= c0.ini && new Date(m.data) < c0.fim).forEach(m => { const c = catOf((prodById(m.pid) || {}).cat).curto; gc[c] = (gc[c] || 0) + (m.total || 0); });
+  const srD = semRegistro(c0); if (srD) gc['Sem registro'] = srD;
   const gTot = Object.values(gc).reduce((a, b) => a + b, 0);
   const cols = ['#16a34a','#2563eb','#f59e0b','#8b5cf6','#ef4444','#0ea5e9','#14b8a6','#64748b','#ec4899','#a3a3a3'];
   const gcHtml = gTot ? Object.entries(gc).sort((a, b) => b[1] - a[1]).map(([k, v], i) => `<div class="hbar"><span>${esc(k)}</span><div class="tr"><div class="fi" style="width:${v / gTot * 100}%;background:${cols[i % cols.length]}"></div></div><span class="right nm">${brl(v)}</span></div>`).join('') : '<div class="nodata">Sem dados suficientes<br><span class="small">nenhuma compra neste ciclo</span></div>';
@@ -1986,8 +2151,7 @@ function pgDash(){
       <td class="${s.sit === 'zerado' ? 'c-re nm' : ''}">${s.sit === 'zerado' ? 'Imediata' : fdate(s.termino)}</td><td class="small">${it ? esc(it.motivo) : ''}</td></tr>`).join('')}</tbody></table></div>`
     : `<div class="nodata">${sit.pendente === ps.length ? 'Sem dados suficientes: confira o estoque para ativar os alertas' : 'Nenhum produto pedindo atenção ✓'}</div>`;
   return header('dashboard', 'Visão geral das compras, gastos e estoque')
-  + `<div class="kpis" style="grid-template-columns:repeat(5,1fr)">
-      ${kpi('wallet', 'Vale (por ciclo)', brl(DB.config.vale), 'reserva: ' + brl(reserva()), '', 'openDados()')}
+  + valeCard() + `<div class="kpis" style="grid-template-columns:repeat(4,1fr)">
       ${kpi('target', 'Meta de Gastos', brl(DB.config.meta), 'ciclo ' + cycLabel(P.c0), '', 'openDados()')}
       ${kpi('receipt', 'Gasto no Ciclo', brl(P.gasto), compras.length ? 'compras confirmadas' : 'nenhuma compra ainda', 'c-re')}
       ${kpi('coins', 'Saldo da Meta', brl(P.saldo), '', P.saldo < 0 ? 'c-re' : 'c-gr')}
@@ -2057,7 +2221,7 @@ function openDados(sec){
       <div class="fl"><label>Dia do crédito do vale</label><select id="cf_dia"><option value="ultimo" ${c.diaCredito === 'ultimo' ? 'selected' : ''}>Último dia do mês</option>${Array.from({length: 28}, (_, i) => `<option value="${i + 1}" ${+c.diaCredito === i + 1 ? 'selected' : ''}>Dia ${i + 1}</option>`).join('')}</select></div>
       <div class="fl"><label>Antecedência da compra (dias)</label><input id="cf_mar" value="${c.margem}"></div>
     </div>
-    <div class="small muted" style="margin-top:8px">Ciclo atual: ${cycLabel(cycleN(0))}. O gasto do ciclo soma só compras confirmadas entre um crédito e o próximo (não é o mês civil). Reserva vazia = vale − meta.</div>
+    <div class="small muted" style="margin-top:8px">Ciclo atual: ${cycLabel(cycleN(0))}. O gasto do ciclo soma as compras confirmadas entre um crédito e o próximo (não é o mês civil) e, se você informar o saldo do vale, também o que saiu sem registro. Reserva vazia = vale − meta.</div>
     <div class="row" style="margin-top:10px"><span style="margin-left:auto"></span><button class="btn green" onclick="saveConfig()">${IC.check} Salvar orçamento</button></div></div>`;
   const ex = `<div class="card" style="margin-bottom:14px"><h3>${IC.xls.replace('<svg','<svg width="18"')} Planilha Excel (HOME_CONTROL.xlsx)</h3>
     <div class="small" style="margin-bottom:10px"><b>Fonte principal:</b> os dados ficam neste app (salvos neste navegador). O Excel é a cópia editável: exporte, edite no Excel (produtos e orçamento) e importe de volta. A sincronização não é instantânea — é feita por estes botões, com revisão e detecção de conflitos.</div>
@@ -2177,7 +2341,7 @@ function exportXlsx(){
     ['Reserva (R$) — vazio = vale − meta', {v: c.reserva ?? '', s: 6}, 'editável'], ['Dia do crédito (número ou "ultimo")', {v: c.diaCredito, s: 6}, 'editável'],
     ['Antecedência da compra (dias)', {v: c.margem, s: 6}, 'editável'], [],
     ['Exportado em', {v: now.toISOString(), s: 4}, 'não editar (usado para detectar conflitos)'],
-    ['Versão do app', {v: 'v0.6.1 teste', s: 4}, ''], [],
+    ['Versão do app', {v: 'v0.7 teste', s: 4}, ''], [],
     [{v: 'COMO SINCRONIZAR', s: 5}],
     ['1. A fonte principal é o app. Esta planilha é uma cópia editável.'],
     ['2. Edite apenas as células amarelas das abas Produtos e Config. As abas Historico, Precos e Lista são somente leitura (regeradas a cada exportação).'],
